@@ -5,6 +5,14 @@
 <title>GETE.LOG Maracanaú | Entrar</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#eef4f8;color:#173651;font:1rem system-ui}main{max-width:28rem;margin:10vh auto;padding:1.5rem;background:white;border-radius:14px;width:calc(100% - 2rem)}label{display:grid;gap:.4rem;margin:1rem 0}input,button{font:inherit;padding:.65rem;border:1px solid #adc1d2;border-radius:6px}button{background:#154e77;color:white;cursor:pointer}button:disabled{opacity:.6}header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;padding:.5rem 1rem;background:white;gap:1rem}iframe{border:0;width:100%;height:100%;display:block}#area{height:100dvh;display:grid;grid-template-rows:auto minmax(0,1fr)}[hidden]{display:none!important}
+
+#barraConta{position:relative;z-index:2;display:flex;justify-content:flex-end;flex-wrap:nowrap;gap:.6rem;min-height:30px;padding:2px 8px;background:#edf4f9;border-bottom:1px solid #d4e2ed}
+#nuvemStatus{min-width:0;font-size:.75rem;overflow-wrap:anywhere}
+#menuConta{position:relative;flex:none}
+#menuConta summary{cursor:pointer;font-size:.75rem;font-weight:650;padding:4px 9px;border-radius:5px;color:#154e77;background:#fff;border:1px solid #c1d5e5}
+#acoesConta{position:absolute;right:0;top:calc(100% + 5px);display:grid;gap:.36rem;width:min(250px,calc(100vw - 20px));padding:8px;background:#fff;border:1px solid #c1d5e5;border-radius:8px;box-shadow:0 8px 22px #18365122}
+#acoesConta button{text-align:left;font-size:.82rem;padding:.4rem .55rem}
+#conta{font-size:.75rem;overflow-wrap:anywhere;padding:.2rem}
 </style>
 <main id="entrada">
 <h1>GETE.LOG Maracanaú</h1>
@@ -16,7 +24,7 @@
 <form id="senhaConvite" hidden><label>Crie sua senha <input type="password" name="senha" minlength="8" autocomplete="new-password" required></label><button>Salvar senha</button></form><p id="status" role="status"></p>
 </main>
 <section id="area" hidden>
-<header><span id="conta"></span><button type="button" id="nuvemAtualizar">Buscar dados atualizados</button><button type="button" id="nuvemSalvar">Tentar salvar</button><button type="button" id="nuvemBackup">Baixar cópia</button><span id="nuvemStatus" role="status"></span><button type="button" id="abrirUsuarios" hidden>Administração · Usuários</button><button id="sair" type="button">Sair</button></header>
+<header id="barraConta"><span id="nuvemStatus" role="status"></span><details id="menuConta"><summary>Conta e dados</summary><div id="acoesConta"><span id="conta"></span><button type="button" id="nuvemAtualizar">Buscar dados atualizados</button><button type="button" id="nuvemSalvar">Tentar salvar</button><button type="button" id="nuvemBackup">Baixar cópia</button><button type="button" id="abrirUsuarios" hidden>Administração · Usuários</button><button id="sair" type="button">Sair</button></div></details></header>
 <iframe id="gete" title="GETE.LOG Maracanaú"></iframe>
 </section>
 <dialog id="gerenciarUsuarios" style="width:min(34rem,calc(100% - 2rem));border:1px solid #adc1d2;border-radius:12px;padding:1.25rem;color:#173651">
@@ -246,5 +254,11 @@ el('senhaConvite').onsubmit=async e=>{
   status.textContent='Senha definida. Agora entre com seu e-mail e sua nova senha.';
  }catch(e){status.textContent=e.message}finally{botao.disabled=false}
 };
+
+const menuConta=el('menuConta');
+el('acoesConta').addEventListener('click',e=>{if(e.target.closest('button'))menuConta.open=false});
+document.addEventListener('pointerdown',e=>{if(!menuConta.contains(e.target))menuConta.open=false});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&menuConta.open){menuConta.open=false;menuConta.querySelector('summary').focus()}});
+el('gete').addEventListener('load',()=>el('gete').contentDocument?.addEventListener('pointerdown',()=>{menuConta.open=false}));
 </script>
 </html>
