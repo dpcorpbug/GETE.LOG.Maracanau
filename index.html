@@ -26,11 +26,24 @@
 <form id="senhaConvite" hidden><label>Crie sua senha <input type="password" name="senha" minlength="8" autocomplete="new-password" required></label><button>Salvar senha</button></form><p id="status" role="status"></p>
 </main>
 <section id="area" hidden>
-<header id="barraConta"><span id="nuvemStatus" role="status"></span><details id="menuConta"><summary>Conta e dados</summary><div id="acoesConta"><span id="conta"></span><button type="button" id="nuvemAtualizar">Buscar dados atualizados</button><button type="button" id="nuvemSalvar">Tentar salvar</button><button type="button" id="nuvemBackup">Baixar cópia</button><button type="button" id="abrirUsuarios" hidden>Administração · Usuários</button><button type="button" id="abrirMinhaConta">Minha conta</button><button id="sair" type="button">Sair</button></div></details></header>
+<header id="barraConta"><span id="nuvemStatus" role="status"></span><details id="menuConta"><summary>Conta e dados</summary><div id="acoesConta"><span id="conta"></span><button type="button" id="nuvemAtualizar">Buscar dados atualizados</button><button type="button" id="nuvemSalvar">Tentar salvar</button><button type="button" id="nuvemBackup">Baixar cópia</button><button type="button" id="abrirConsultaLog" hidden>Consultar Logística</button><button type="button" id="abrirUsuarios" hidden>Administração · Usuários</button><button type="button" id="abrirMinhaConta">Minha conta</button><button id="sair" type="button">Sair</button></div></details></header>
 <iframe id="gete" title="GETE.LOG Maracanaú"></iframe>
 </section>
-<dialog id="gerenciarUsuarios" style="width:min(34rem,calc(100% - 2rem));border:1px solid #adc1d2;border-radius:12px;padding:1.25rem;color:#173651">
+<dialog id="gerenciarUsuarios" style="width:min(34rem,calc(100% - 2rem));max-height:90dvh;overflow:auto;border:1px solid #adc1d2;border-radius:12px;padding:1.25rem;color:#173651">
 <h2>Administração · Usuários</h2>
+<section id="gestaoContas">
+<h3>Contas cadastradas</h3>
+<p id="gestaoStatus" role="status"></p>
+<label>Conta <select id="contaGerenciar"></select></label>
+<form id="formGerenciar" hidden>
+<p id="perfilGerenciar"></p>
+<fieldset id="permissoesAtuais"><legend>Permissões da equipe</legend></fieldset>
+<button id="salvarAcessos">Salvar acessos</button>
+<button type="button" id="alternarConta"></button>
+<button type="button" id="excluirConta">Excluir definitivamente</button>
+</form>
+</section>
+<h3>Convidar usuário</h3>
 <form id="formConvite">
 <label>Nome <input name="nome" required maxlength="120"></label>
 <label>E-mail <input name="email" type="email" required maxlength="254"></label>
@@ -38,6 +51,7 @@
 <label id="escolhaUnidade" hidden>Unidade <select name="unidade" id="unidadeConvite"></select></label>
 <p id="avisoAdministrador" hidden>Administradores podem editar a rede, operar a Logística e convidar outros administradores.</p><fieldset id="permissoesEquipe"><legend>Permissões da equipe</legend>
 <label><span><input type="checkbox" name="acesso" value="unidades.editar"> Editar unidades de ensino</span></label>
+<label><span><input type="checkbox" name="acesso" value="logistica.consultar"> Consultar a Logística</span></label>
 <label><span><input type="checkbox" name="acesso" value="logistica.operar"> Operar cargas, estoque e expedição</span></label>
 </fieldset>
 <p>Todas as contas recebem consulta à rede. Contas de escola recebem acesso ao Portal vinculado à sua unidade.</p>
@@ -45,6 +59,16 @@
 <button type="button" onclick="this.closest('dialog').close()">Fechar</button>
 </form>
 <p id="conviteStatus" role="status"></p>
+</dialog>
+<dialog id="consultaLog" class="dialogConta">
+<h2>Logística · Consulta</h2>
+<label>Área <select id="consultaLogArea">
+<option value="cargas">Cargas</option><option value="materiais">Estoque</option>
+<option value="entregas">Entregas</option><option value="movimentos">Movimentações</option>
+</select></label>
+<p id="consultaLogStatus" role="status"></p><ul id="consultaLogLista"></ul>
+<button type="button" id="atualizarConsultaLog">Atualizar</button>
+<button type="button" onclick="this.closest('dialog').close()">Fechar</button>
 </dialog>
 <dialog id="recuperarConta" class="dialogConta">
  <h2>Esqueci minha senha</h2>
@@ -212,6 +236,7 @@ form.onsubmit=async e=>{
   if(perfil.error)throw perfil.error;
   el('abrirUsuarios').hidden=!(perfil.data?.ativo&&perfil.data.papel==='administrador');
   acessoAtual=acesso.data;
+  el('abrirConsultaLog').hidden=!acessoAtual.includes('logistica.consultar')||acessoAtual.includes('logistica.operar');
   await carregarNuvem();
   montarTela();
   informar('Base compartilhada carregada.');
@@ -240,6 +265,7 @@ tipoConta.onchange();
 el('abrirUsuarios').onclick=async()=>{
  const dlg=el('gerenciarUsuarios'), status=el('conviteStatus');
  if(!dlg.open)dlg.showModal();
+ listarContas();
  status.textContent='Carregando unidades…';
  try{
   const {data,error}=await banco.from('gete_unidades').select('id,nome').eq('ativa',true).order('nome');
@@ -263,8 +289,101 @@ conviteForm.onsubmit=async e=>{
    throw Error(corpo?.erro||error.message);
   }
   status.textContent=data.mensagem;
-  conviteForm.reset();tipoConta.onchange();
+  conviteForm.reset();tipoConta.onchange();listarContas();
  }catch(e){status.textContent=e.message}finally{botao.disabled=false}
+};
+const contaGerenciar=el('contaGerenciar'), gestaoStatus=el('gestaoStatus');
+const formGerenciar=el('formGerenciar');
+const permissoesAtuais=el('permissoesAtuais');
+for(const label of el('permissoesEquipe').querySelectorAll('label'))permissoesAtuais.append(label.cloneNode(true));
+let contasGerenciadas=[], autorGestao='';
+async function chamarGestao(body){
+ const {data,error}=await banco.functions.invoke('gerenciar-usuarios',{body});
+ if(error){
+  const resposta=await error.context?.json?.().catch(()=>null);
+  throw Error(resposta?.erro||error.message);
+ }
+ return data;
+}
+async function listarContas(selecionada=contaGerenciar.value, mensagem=''){
+ contaGerenciar.disabled=true;
+ formGerenciar.hidden=true;
+ gestaoStatus.textContent='Carregando contas…';
+ try{
+  const contas=[];
+  let proxima=true;
+  for(let pagina=1;proxima;pagina++){
+   const resultado=await chamarGestao({acao:'listar',pagina});
+   if(!Array.isArray(resultado.usuarios))throw Error('Atualize a função gerenciar-usuarios no Supabase.');
+   contas.push(...resultado.usuarios);
+   autorGestao=resultado.autor;
+   proxima=resultado.proxima;
+  }
+  contasGerenciadas=contas.sort((a,b)=>String(a.nome||a.email).localeCompare(String(b.nome||b.email),'pt-BR'));
+  contaGerenciar.replaceChildren(new Option('Selecione uma conta',''),...contasGerenciadas.map(c=>
+   new Option([c.nome,c.email,c.ativo?'':'Desativada'].filter(Boolean).join(' · '),c.usuario_id)));
+  contaGerenciar.value=contasGerenciadas.some(c=>c.usuario_id===selecionada)?selecionada:'';
+  contaGerenciar.onchange();
+  gestaoStatus.textContent=mensagem||(contas.length?'':'Nenhuma conta cadastrada.');
+ }catch(e){gestaoStatus.textContent=e.message}
+ finally{contaGerenciar.disabled=false}
+}
+contaGerenciar.onchange=()=>{
+ const c=contasGerenciadas.find(c=>c.usuario_id===contaGerenciar.value);
+ formGerenciar.hidden=!c;
+ if(!c)return;
+ const propria=c.usuario_id===autorGestao;
+ const editar=c.papel==='logistica'&&!propria;
+ const papel={logistica:'Equipe interna',escola:'Escola',administrador:'Administrador'}[c.papel]||c.papel;
+ el('perfilGerenciar').textContent=[papel,c.ativo?'Ativa':'Desativada',propria?'Sua conta':''].filter(Boolean).join(' · ');
+ permissoesAtuais.hidden=!editar;
+ el('salvarAcessos').hidden=!editar;
+ el('alternarConta').hidden=propria;
+ el('alternarConta').textContent=c.ativo?'Desativar conta':'Reativar conta';
+ el('excluirConta').hidden=propria||c.ativo||c.papel==='administrador';
+ for(const campo of permissoesAtuais.querySelectorAll('input'))campo.checked=c.acessos.includes(campo.value);
+};
+async function alterarConta(acao){
+ const c=contasGerenciadas.find(c=>c.usuario_id===contaGerenciar.value);
+ if(!c||c.usuario_id===autorGestao)return;
+ if(acao==='desativar'&&!confirm('Desativar o acesso de '+(c.email||c.nome)+'?'))return;
+ if(acao==='excluir'&&prompt('A exclusão de '+(c.email||c.nome)+' é definitiva. Digite EXCLUIR para confirmar.')!=='EXCLUIR')return;
+ const acessos=new FormData(formGerenciar).getAll('acesso');
+ const controles=[contaGerenciar,...formGerenciar.querySelectorAll('button,input')];
+ controles.forEach(x=>x.disabled=true);
+ gestaoStatus.textContent='Aplicando alteração…';
+ try{
+  const r=await chamarGestao({acao,usuario:c.usuario_id,acessos});
+  await listarContas(c.usuario_id,r.mensagem);
+ }catch(e){gestaoStatus.textContent=e.message}
+ finally{controles.forEach(x=>x.disabled=false)}
+}
+formGerenciar.onsubmit=e=>{e.preventDefault();alterarConta('acessos')};
+el('alternarConta').onclick=()=>alterarConta(contasGerenciadas.find(c=>c.usuario_id===contaGerenciar.value)?.ativo?'desativar':'reativar');
+el('excluirConta').onclick=()=>alterarConta('excluir');
+
+function renderConsultaLog(){
+ const lista=el('consultaLogLista'), status=el('consultaLogStatus');
+ lista.replaceChildren();
+ try{
+  const dados=estados.get('logistica')?.dados;
+  if(!dados)throw Error('A base de Logística não está disponível para esta conta.');
+  const origem=dados.geoeduc_maracanau_logistica_v1;
+  const registros=(typeof origem==='string'?JSON.parse(origem):origem)?.[el('consultaLogArea').value]||[];
+  status.textContent=registros.length?registros.length+' registro(s)':'Nenhum registro nesta área.';
+  for(const registro of registros){
+   const item=document.createElement('li');
+   const campos=[registro.titulo||registro.nome||registro.material||registro.escola||registro.tipo,
+    registro.status,registro.quantidade??registro.saldo,registro.data||registro.previsao];
+   item.textContent=campos.filter(v=>typeof v==='number'||typeof v==='string'&&v).join(' · ')||'Registro '+(registro.id??'');
+   lista.append(item);
+  }
+ }catch(e){status.textContent=e.message}
+}
+el('abrirConsultaLog').onclick=()=>{renderConsultaLog();el('consultaLog').showModal()};
+el('consultaLogArea').onchange=renderConsultaLog;
+el('atualizarConsultaLog').onclick=async()=>{
+ try{await carregarNuvem();renderConsultaLog()}catch(e){el('consultaLogStatus').textContent=e.message}
 };
 if(linkConvite&&banco){
  el('login').hidden=true;
